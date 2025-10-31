@@ -1,0 +1,182 @@
+/* =============================
+   Elderly Tech Companion Styles
+   ============================= */
+body {
+  font-family: "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #fff8d9, #fff0b3);
+  color: #333;
+  margin: 0;
+  padding: 0;
+  transition: background 0.4s ease, color 0.4s ease;
+}
+
+/* HEADER */
+header {
+  background: linear-gradient(90deg, #ffb300, #ff8c00);
+  color: white;
+  text-align: center;
+  padding: 20px;
+}
+header h1 {
+  margin: 0;
+  font-size: 36px;
+}
+header p {
+  font-size: 18px;
+  margin-top: 6px;
+}
+
+/* NAVIGATION GRID */
+.nav-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  background: #fff6cc;
+  padding: 15px;
+}
+.nav-grid button {
+  background: #ffb300;
+  color: white;
+  border: none;
+  padding: 12px;
+  font-size: 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.nav-grid button:hover {
+  background: #ff8c00;
+  transform: scale(1.05);
+}
+
+/* PANELS / SECTIONS */
+.panel {
+  background: #fff9e1;
+  border-radius: 12px;
+  margin: 20px auto;
+  padding: 20px;
+  width: 90%;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+.panel h2 {
+  color: #ff8c00;
+  margin-top: 0;
+}
+
+/* TEXTAREA & INPUTS */
+textarea, input[type="text"], input[type="time"] {
+  width: 100%;
+  font-size: 16px;
+  padding: 8px;
+  margin-top: 8px;
+  border: 2px solid #ffb300;
+  border-radius: 8px;
+}
+button {
+  background: #ff8c00;
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 8px;
+  margin-top: 8px;
+  cursor: pointer;
+  font-size: 16px;
+}
+button:hover {
+  background: #ffb300;
+}
+
+/* RESPONSES / OUTPUTS */
+.response {
+  background: #fff4a8;
+  padding: 10px;
+  border-radius: 8px;
+  margin-top: 10px;
+  white-space: pre-wrap;
+}
+
+/* GALLERY */
+.gallery-grid {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.gallery-grid img {
+  width: 180px;
+  height: 130px;
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+/* MEMORY GAME */
+#memoryGame {
+  display: grid;
+  grid-template-columns: repeat(4, 80px);
+  gap: 10px;
+  justify-content: center;
+}
+.memory-card {
+  background: #ffcc80;
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  cursor: pointer;
+  color: #333;
+}
+.memory-card.flipped {
+  background: #ffb300;
+  color: white;
+}
+
+/* EMERGENCY */
+.emergencyBtn {
+  background: red !important;
+  color: white;
+  padding: 14px 20px;
+  font-size: 20px;
+  border-radius: 10px;
+}
+.emergencyBtn:hover {
+  background: darkred !important;
+}
+
+/* FOOTER */
+footer {
+  background: #ffefb0;
+  color: #5a4b00;
+  text-align: center;
+  padding: 12px;
+}
+
+/* DARK MODE */
+.dark-mode {
+  background: #333;
+  color: #f7f7f7;
+}
+.dark-mode header {
+  background: linear-gradient(90deg, #ff8c00, #ffb300);
+}
+.dark-mode .panel {
+  background: #444;
+}
+.dark-mode textarea, .dark-mode input {
+  background: #555;
+  color: white;
+  border-color: #ffb300;
+}
+
+/* ACCESSIBILITY: HIGH CONTRAST */
+.high-contrast {
+  background: #000 !important;
+  color: #fff !important;
+}
+.high-contrast button {
+  background: yellow !important;
+  color: black !important;
+}

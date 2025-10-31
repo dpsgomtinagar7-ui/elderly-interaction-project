@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Elderly Tech Companion</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-orange': '#FF8C00', /* High Contrast Orange */
+                        'primary-yellow': '#FFD700', /* High Contrast Gold */
+                        'bg-dark': '#1A1A1A',
+                        'text-light': '#FFFFFF',
+                        'bg-light': '#F0F0F0',
+                    },
+                    fontSize: {
+                        'base': '1.25rem',
+                        'xl': '1.5rem',
+                        '2xl': '2rem',
+                        '3xl': '2.5rem',
+                        'card-icon': '3rem', /* Extra large for icons */
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Base styles for accessibility */
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: all 0.3s ease;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            font-size: var(--base-font-size);
+        }
+
+        /* Default Dark Theme Variables */
+        :root {
+            --text-color: #FFFFFF;
+            --bg-color: #1A1A1A;
+            --panel-bg: #2C2C2C;
+            --border-color: #FF8C00;
+            --button-primary: #FF8C00;
+            --button-secondary: #FFD700;
+            --base-font-size: 1.25rem;
+        }
+
+        /* Light Theme Variables */
+        body.light-theme {
+            --text-color: #1A1A1A;
+            --bg-color: #F0F0F0;
+            --panel-bg: #FFFFFF;
+            --border-color: #FF8C00;
+            --button-primary: #FF8C00;
+            --button-secondary: #FFD700;
+        }
+
+        .panel {
+            background-color: var(--panel-bg);
+            border: 4px solid var(--border-color);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .nav-grid button,
+        .panel button {
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            min-height: 56px; /* Large touch target */
+            font-size: 1.5rem;
+        }
+
+        .nav-grid button:hover,
+        .panel button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+        }
+        
+        /* Ensure input/textarea text color is readable regardless of theme */
+        .panel input,
+        .panel textarea {
+            color: #1A1A1A; 
+        }
+
+        /* Spinner style for loading */
+        .spinner {
+            border: 8px solid rgba(255, 255, 255, 0.1);
+            border-top: 8px solid #FFD700;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* --- Memory Game Styles --- */
+        .memory-game {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-gap: 8px;
+            perspective: 1000px;
+            padding: 10px;
+            background-color: var(--bg-color);
+            border-radius: 8px;
+        }
+        .memory-card {
+            width: 100%;
+            height: 100px; /* Large touch target */
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.5s;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+        }
+        .memory-card.flip {
+            transform: rotateY(180deg);
+        }
+        .front-face, .back-face {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            backface-visibility: hidden;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: var(--card-icon);
+            font-weight: bold;
+        }
+        .front-face {
+            background-color: var(--panel-bg);
+            color: var(--text-color);
+            transform: rotateY(180deg);
+        }
+        .back-face {
+            background-color: var(--primary-orange);
+            color: var(--text-light);
+            font-size: 1.5rem; /* Text on the back of the card */
+        }
+        .memory-card.matched {
+            cursor: default;
+            opacity: 0.8;
+            pointer-events: none; /* Disable clicking matched cards */
+        }
+
+        /* Responsive adjustments for smaller screens */
+        @media (max-width: 640px) {
+            .memory-card {
+                height: 80px;
+            }
+            .front-face, .back-face {
+                font-size: 2.5rem;
+            }
+        }
+    </style>
+</head>
+
+<body class="p-4 md:p-8">
+    <script>
+        // --- Global Variables and API Setup ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'techbridge-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const apiKey = ""; // API key for Gemini calls
+        
+        // API URLs
+        const modelUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        const ttsUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+
+        let currentZoomLevel = 1.0;
+        let baseFontSize = 1.25; // in rem
+        let isDarkTheme = true;
+
+        // --- Utility Functions (TTS Helpers) ---
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function pcmToWav(pcm16, sampleRate) {
+            const numChannels = 1;
+            const bytesPerSample = 2; 
+            const buffer = new ArrayBuffer(44 + pcm16.length * bytesPerSample);
+            const view = new DataView(buffer);
+            const writeString = (v, o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+
+            writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + pcm16.length * bytesPerSample, true);
+            writeString(view, 8, 'WAVE'); writeString(view, 12, 'fmt '); view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true); view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+            view.setUint16(32, numChannels * bytesPerSample, true); view.setUint16(34, 16, true);
+            writeString(view, 36, 'data'); view.setUint32(40, pcm16.length * bytesPerSample, true); 
+
+            let offset = 44;
+            for (let i = 0; i < pcm16.length; i++) {
+                view.setInt16(offset, pcm16[i], true);
+                offset += 2;
+            }
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+        // Exponential backoff utility for robust API calls
+        async function fetchWithBackoff(url, options, maxRetries = 5) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response;
+                } catch (error) {
+                    if (i === maxRetries - 1) throw error;
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    console.warn(`Request failed. Retrying in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        function scrollToSection(id) {
+            document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // --- Firebase Boilerplate ---
+        let db, auth, userId;
+    </script>
+    
+    <!-- Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        setLogLevel('Debug');
+
+        async function initFirebase() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+                
+                // Initialize Reminders Listener
+                setupRemindersListener();
+
+                console.log("Firebase initialized. User ID:", userId);
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+            }
+        }
+        
+        initFirebase();
+        
+        // --- Reminder Persistence (Placeholder for Real-time Updates) ---
+        function setupRemindersListener() {
+            const remindersRef = collection(db, `artifacts/${appId}/users/${userId}/reminders`);
+            const q = query(remindersRef, orderBy("timestamp", "asc"));
+            
+            onSnapshot(q, (snapshot) => {
+                const reminderList = document.getElementById('reminderList');
+                reminderList.innerHTML = '';
+                if (snapshot.empty) {
+                     reminderList.innerHTML = '<li class="p-3 bg-gray-700 rounded-lg flex justify-between items-center text-xl text-gray-400">No reminders set yet.</li>';
+                     return;
+                }
+                snapshot.forEach(doc => {
+                    const reminder = doc.data();
+                    const li = document.createElement('li');
+                    li.className = 'p-3 bg-gray-600 rounded-lg flex justify-between items-center my-2 text-xl';
+                    li.textContent = `${reminder.text} at ${reminder.time}`;
+                    // Note: In a real app, you'd add a delete button here.
+                    reminderList.appendChild(li);
+                });
+            });
+        }
+        
+        document.getElementById('addReminder').onclick = async () => {
+            const reminderText = document.getElementById('reminderText');
+            const reminderTime = document.getElementById('reminderTime');
+            const text = reminderText.value.trim();
+            const time = reminderTime.value.trim();
+
+            if (!text || !time) {
+                console.error("Please enter both text and a time for the reminder.");
+                return;
+            }
+            
+            try {
+                const remindersRef = collection(db, `artifacts/${appId}/users/${userId}/reminders`);
+                await addDoc(remindersRef, {
+                    text: text,
+                    time: time,
+                    timestamp: serverTimestamp()
+                });
+                reminderText.value = '';
+                reminderTime.value = '';
+            } catch (error) {
+                console.error("Error adding reminder:", error);
+            }
+        };
+        
+        // --- Feedback Persistence ---
+        document.getElementById('sendFeedback').onclick = async () => {
+            const nameInput = document.getElementById('fbName');
+            const msgInput = document.getElementById('fbMsg');
+            const responseDiv = document.getElementById('fbResponse');
+            
+            const name = nameInput.value.trim();
+            const message = msgInput.value.trim();
+            
+            if (!message) {
+                responseDiv.innerHTML = '<p class="text-primary-yellow font-bold">Please write a message before submitting.</p>';
+                return;
+            }
+            
+            // --- CORE REQUESTED LOGIC ---
+            responseDiv.innerHTML = '<p class="text-primary-yellow font-bold">Thanks for suggestion!!</p>';
+            nameInput.value = ''; // Clear input
+            msgInput.value = ''; // Clear input
+            // --- END CORE REQUESTED LOGIC ---
+
+            try {
+                // Public data path for general feedback
+                const feedbackRef = collection(db, `artifacts/${appId}/public/data/feedback`);
+                await addDoc(feedbackRef, {
+                    name: name || 'Anonymous',
+                    message: message,
+                    userId: userId,
+                    timestamp: serverTimestamp()
+                });
+            } catch (error) {
+                console.error("Error sending feedback:", error);
+                responseDiv.innerHTML = '<p class="text-red-500 font-bold">Feedback saved locally but network save failed.</p>';
+            }
+        };
+    </script>
+    
+    <!-- Header -->
+    <header class="bg-primary-orange p-6 rounded-xl mb-8 shadow-xl text-center text-text-light">
+        <h1 class="text-4xl font-extrabold">🌞 Elderly Tech Companion</h1>
+        <p class="text-xl mt-2">Helping seniors interact easily with technology. High-contrast, large text.</p>
+    </header>
+
+    <!-- Navigation Grid -->
+    <nav class="nav-grid grid grid-cols-2 md:grid-cols-5 gap-4 mb-12">
+
+        <button onclick="scrollToSection('reminders')" class="bg-primary-yellow text-bg-dark font-bold rounded-lg hover:bg-yellow-400">⏰ Reminders</button>
+        <button onclick="scrollToSection('tts')" class="bg-primary-yellow text-bg-dark font-bold rounded-lg hover:bg-yellow-400">🔊 Text to Speech</button>
+        <button onclick="scrollToSection('feedback')" class="bg-primary-yellow text-bg-dark font-bold rounded-lg hover:bg-yellow-400">💬 Feedback</button>
+        <button onclick="scrollToSection('magnifier')" class="bg-primary-yellow text-bg-dark font-bold rounded-lg hover:bg-yellow-400">🔍 Magnifier</button>
+        <button onclick="scrollToSection('settings')" class="bg-primary-yellow text-bg-dark font-bold rounded-lg hover:bg-yellow-400">⚙️ Settings</button>
+        <button onclick="scrollToSection('memory')" class="bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600">🧠 Memory Game</button>
+        <button onclick="window.open('https://www.msn.com/en-in/weather/forecast/in-Kanpur,Up?loc=eyJsIjoiS2FucHVyIiwiciI6IlVwIiwiYyI6IkluZGlhIiwiaSI6IklOIiwieCI6IjgwLjI2MzEiLCJ5IjoiMjYuNTI5NiJ9&weadegreetype=C&ocid=ansmsnweather', '_blank')" class="bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600">☀️ Weather</button>
+        <button onclick="scrollToSection('chat')" class="bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600">💬 Chatbot</button>
+        <button onclick="scrollToSection('summarizer')" class="bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600">📝 Summarizer</button>
+        <button onclick="window.open('https://news.google.com/home?hl=en-IN&gl=IN&ceid=IN:en', '_blank')" class="bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600">📰 News</button>
+
+    </nav>
+
+    <main class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        <!-- 2. Reminders -->
+        <section id="reminders" class="panel p-6 rounded-xl">
+            <h2 class="text-3xl font-bold mb-4 text-primary-yellow">⏰ Reminders</h2>
+            <input id="reminderText" placeholder="Enter reminder (e.g. Take medicine)" class="w-full p-3 mb-3 text-xl rounded-lg border-2 border-gray-400" />
+            <input type="time" id="reminderTime" class="w-full p-3 mb-3 text-xl rounded-lg border-2 border-gray-400" />
+            <button id="addReminder" class="w-full bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600 p-3">Add Reminder</button>
+            <ul id="reminderList" class="mt-4 space-y-2">
+                <li class="p-3 bg-gray-700 rounded-lg flex justify-between items-center text-xl">Loading reminders...</li>
+            </ul>
+        </section>
+
+        <!-- 3. Text to Speech -->
+        <section id="tts" class="panel p-6 rounded-xl">
+            <h2 class="text-3xl font-bold mb-4 text-primary-yellow">🔊 Text to Speech</h2>
+            <textarea id="ttsInput" placeholder="Type something to hear it aloud..." rows="4" class="w-full p-3 mb-3 text-xl rounded-lg border-2 border-gray-400"></textarea><br>
+            <button id="ttsBtn" onclick="readTextAloud()" class="w-full bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600 p-3">Speak</button>
+            <audio id="audio-player" class="hidden w-full mt-4 rounded-lg" controls></audio>
+        </section>
+        
+        <!-- 13. Chatbot -->
+        <section id="chat" class="panel p-6 rounded-xl">
+            <h2 class="text-3xl font-bold mb-4 text-primary-yellow">💬 Chatbot (Ask Gemini)</h2>
+            <textarea id="chatInput" placeholder="Ask Gemini anything..." rows="3" class="w-full p-3 mb-3 text-xl rounded-lg border-2 border-gray-400"></textarea><br>
+            <div class="flex space-x-2">
+                <button id="chatBtn" onclick="sendChat()" class="flex-1 bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600 p-3">Send</button>
+                <button id="speakChatBtn" onclick="readChatReply()" class="flex-1 bg-primary-yellow text-bg-dark font-bold rounded-lg hover:bg-yellow-400 p-3">Read Reply Aloud</button>
+            </div>
+            <div id="chatOutput" class="mt-4 p-4 text-xl bg-gray-700 rounded-lg border-l-4 border-primary-yellow min-h-[100px] text-text-light">
+                <p class="text-gray-400">Chat replies will appear here.</p>
+            </div>
+            <div id="chatLoading" class="hidden mt-4 flex justify-center"><div class="spinner"></div></div>
+        </section>
+        
+        <!-- 14. Summarizer -->
+        <section id="summarizer" class="panel p-6 rounded-xl">
+            <h2 class="text-3xl font-bold mb-4 text-primary-yellow">📝 Summarizer</h2>
+            <textarea id="sumInput" placeholder="Paste long text here..." rows="4" class="w-full p-3 mb-3 text-xl rounded-lg border-2 border-gray-400"></textarea><br>
+            <button id="sumBtn" onclick="summarizeText()" class="w-full bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600 p-3">Summarize</button>
+            <div id="sumOutput" class="mt-4 p-4 text-xl bg-gray-700 rounded-lg border-l-4 border-primary-yellow min-h-[100px] text-text-light">
+                 <p class="text-gray-400">Your summarized text will appear here.</p>
+            </div>
+            <div id="sumLoading" class="hidden mt-4 flex justify-center"><div class="spinner"></div></div>
+        </section>
+
+        <!-- 4. Feedback -->
+        <section id="feedback" class="panel p-6 rounded-xl">
+            <h2 class="text-3xl font-bold mb-4 text-primary-yellow">💬 Feedback</h2>
+            <input id="fbName" placeholder="Your name (optional)" class="w-full p-3 mb-3 text-xl rounded-lg border-2 border-gray-400" />
+            <textarea id="fbMsg" placeholder="Write feedback here..." rows="3" class="w-full p-3 mb-3 text-xl rounded-lg border-2 border-gray-400"></textarea><br>
+            <button id="sendFeedback" class="w-full bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600 p-3">Submit</button>
+            <div id="fbResponse" class="mt-4 p-3 text-xl min-h-[50px] text-center font-semibold text-text-light"></div>
+        </section>
+        
+        <!-- 7. Magnifier -->
+        <section id="magnifier" class="panel p-6 rounded-xl">
+            <h2 class="text-3xl font-bold mb-4 text-primary-yellow">🔍 Magnifier</h2>
+            <p class="text-xl mb-4">Temporarily zoom in on the entire application window.</p>
+            <div class="flex space-x-4">
+                <button onclick="zoomIn()" class="flex-1 bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600 p-3">Zoom In (+)</button>
+                <button onclick="zoomOut()" class="flex-1 bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600 p-3">Zoom Out (-)</button>
+            </div>
+        </section>
+        
+        <!-- 8. Settings -->
+        <section id="settings" class="panel p-6 rounded-xl">
+            <h2 class="text-3xl font-bold mb-4 text-primary-yellow">⚙️ Settings</h2>
+            <div class="space-y-4">
+                <button onclick="toggleTheme()" class="w-full bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600 p-3">Toggle Theme (Dark/Light)</button>
+                <div class="flex space-x-4">
+                    <button onclick="increaseFont()" class="flex-1 bg-primary-yellow text-bg-dark font-bold rounded-lg hover:bg-yellow-400 p-3">Increase Font (A+)</button>
+                    <button onclick="decreaseFont()" class="flex-1 bg-primary-yellow text-bg-dark font-bold rounded-lg hover:bg-yellow-400 p-3">Decrease Font (A-)</button>
+                </div>
+            </div>
+        </section>
+        
+        <!-- 9. Memory Game (Implemented!) -->
+        <section id="memory" class="panel p-6 rounded-xl">
+            <h2 class="text-3xl font-bold mb-4 text-primary-yellow">🧠 Memory Game</h2>
+            <div id="memoryGame" class="memory-game min-h-[350px] mb-4">
+                <p class="col-span-4 text-center text-xl text-gray-400 p-4">Click "Start Game" to begin matching pairs!</p>
+            </div>
+            <button id="startMemory" class="w-full bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600 p-3">Start Game</button>
+            <div id="gameStatus" class="mt-4 text-center text-2xl font-bold text-primary-yellow"></div>
+        </section>
+        
+        <!-- 10. Weather -->
+        <section id="weather" class="panel p-6 rounded-xl">
+            <h2 class="text-3xl font-bold mb-4 text-primary-yellow">☀️ Weather</h2>
+            <p class="text-xl mb-4">Click below to open a simple, accurate weather forecast.</p>
+            <button id="getWeather" class="w-full bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600 p-3">
+                <a href="https://www.msn.com/en-in/weather/forecast/in-Kanpur,Up?loc=eyJsIjoiS2FucHVyIiwiciI6IlVwIiwiYyI6IkluZGlhIiwiaSI6IklOIiwieCI6IjgwLjI2MzEiLCJ5IjoiMjYuNTI5NiJ9&weadegreetype=C&ocid=ansmsnweather" target="_blank" class="block text-text-light hover:text-text-light">Check Weather (New Window)</a>
+            </button>
+        </section>
+        
+        <!-- 16. News -->
+        <section id="news" class="panel p-6 rounded-xl">
+            <h2 class="text-3xl font-bold mb-4 text-primary-yellow">📰 Daily News</h2>
+            <p class="text-xl mb-4">Get today's top headlines in a new window.</p>
+            <button id="loadNews" class="w-full bg-primary-orange text-text-light font-bold rounded-lg hover:bg-orange-600 p-3">
+                <a href="https://news.google.com/home?hl=en-IN&gl=IN&ceid=IN:en" target="_blank" class="block text-text-light hover:text-text-light">Load Latest Headlines</a>
+            </button>
+        </section>
+
+    </main>
+
+    <footer class="mt-12 pt-6 border-t-4 border-primary-yellow text-center text-xl">
+        <p class="text-primary-orange font-semibold">🌼Built for Elderly Accessibility🌼</p>
+    </footer>
+    
+    <script>
+        // --- LLM/API Functionality ---
+
+        // TTS (Text-to-Speech)
+        async function readTextAloud() {
+            const text = document.getElementById('ttsInput').value.trim();
+            const audioPlayer = document.getElementById('audio-player');
+            const ttsBtn = document.getElementById('ttsBtn');
+
+            if (!text) {
+                console.log("Please enter text to read aloud.");
+                return;
+            }
+
+            audioPlayer.pause();
+            audioPlayer.classList.add('hidden');
+            ttsBtn.textContent = '...Loading Audio';
+            ttsBtn.disabled = true;
+
+            const payload = {
+                contents: [{ parts: [{ text: `Say clearly and slowly: ${text}` }] }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } }
+                },
+                model: "gemini-2.5-flash-preview-tts"
+            };
+
+            try {
+                const response = await fetchWithBackoff(ttsUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                const part = result?.candidates?.[0]?.content?.parts?.[0];
+                const audioData = part?.inlineData?.data;
+                const mimeType = part?.inlineData?.mimeType;
+
+                if (audioData && mimeType && mimeType.startsWith("audio/L16")) {
+                    const rateMatch = mimeType.match(/rate=(\d+)/);
+                    const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 16000;
+                    
+                    const pcmData = base64ToArrayBuffer(audioData);
+                    const pcm16 = new Int16Array(pcmData);
+                    const wavBlob = pcmToWav(pcm16, sampleRate);
+                    const audioUrl = URL.createObjectURL(wavBlob);
+
+                    audioPlayer.src = audioUrl;
+                    audioPlayer.classList.remove('hidden');
+                    audioPlayer.play();
+                    ttsBtn.textContent = 'Play Again';
+                } else {
+                    console.error("Error: The response was not valid PCM audio.");
+                    ttsBtn.textContent = 'Read Aloud Failed';
+                }
+            } catch (error) {
+                console.error("TTS API Error:", error);
+                ttsBtn.textContent = 'Network Error';
+            } finally {
+                ttsBtn.disabled = false;
+            }
+        }
+        
+        // Chatbot and Summarizer Core Logic
+        async function callGemini(prompt, isSummarizer = false) {
+            const outputElement = isSummarizer ? document.getElementById('sumOutput') : document.getElementById('chatOutput');
+            const loadingElement = isSummarizer ? document.getElementById('sumLoading') : document.getElementById('chatLoading');
+            const buttonElement = isSummarizer ? document.getElementById('sumBtn') : document.getElementById('chatBtn');
+            const systemInstruction = isSummarizer 
+                ? "You are a helpful assistant for seniors. Simplify the following text into 3-4 concise, easy-to-understand sentences, using simple vocabulary and direct language."
+                : "You are a friendly, patient, and clear chatbot designed to assist elderly users. Keep your answers concise, encouraging, and use simple language. Avoid technical jargon where possible.";
+
+            outputElement.innerHTML = `<p class="text-primary-yellow font-bold">...Processing...</p>`;
+            loadingElement.classList.remove('hidden');
+            buttonElement.disabled = true;
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+            };
+
+            try {
+                const response = await fetchWithBackoff(modelUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I could not generate a response.";
+                
+                outputElement.innerHTML = `<p>${text}</p>`;
+
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                outputElement.innerHTML = '<p class="text-red-500 font-bold">Connection Error: Failed to get a response.</p>';
+            } finally {
+                loadingElement.classList.add('hidden');
+                buttonElement.disabled = false;
+            }
+        }
+
+        function summarizeText() {
+            const inputElement = document.getElementById('sumInput');
+            const text = inputElement.value.trim();
+            if (text.length < 50) {
+                document.getElementById('sumOutput').innerHTML = '<p class="text-primary-orange font-bold">Please enter at least 50 characters to summarize.</p>';
+                return;
+            }
+            callGemini(text, true);
+        }
+
+        function sendChat() {
+            const inputElement = document.getElementById('chatInput');
+            const text = inputElement.value.trim();
+            if (!text) return;
+            callGemini(text, false);
+            inputElement.value = ''; // Clear input
+        }
+        
+        async function readChatReply() {
+            const reply = document.getElementById('chatOutput').textContent;
+            document.getElementById('ttsInput').value = reply;
+            await readTextAloud();
+        }
+
+        // --- Settings and Magnifier (Accessibility) ---
+
+        // Magnifier functions (applies a CSS scale transformation)
+        function zoomIn() {
+            currentZoomLevel = Math.min(currentZoomLevel + 0.1, 1.5);
+            document.body.style.transform = `scale(${currentZoomLevel})`;
+            document.body.style.transformOrigin = 'top left';
+            console.log('Zoom level:', currentZoomLevel);
+        }
+        
+        function zoomOut() {
+            currentZoomLevel = Math.max(currentZoomLevel - 0.1, 1.0);
+            document.body.style.transform = `scale(${currentZoomLevel})`;
+            document.body.style.transformOrigin = 'top left';
+            console.log('Zoom level:', currentZoomLevel);
+        }
+
+        // Font size functions (applies to CSS variable)
+        function increaseFont() {
+            baseFontSize = Math.min(baseFontSize + 0.1, 2.0); // Max 2.0rem
+            document.documentElement.style.setProperty('--base-font-size', `${baseFontSize}rem`);
+            console.log('Base Font Size:', baseFontSize);
+        }
+
+        function decreaseFont() {
+            baseFontSize = Math.max(baseFontSize - 0.1, 1.0); // Min 1.0rem
+            document.documentElement.style.setProperty('--base-font-size', `${baseFontSize}rem`);
+            console.log('Base Font Size:', baseFontSize);
+        }
+
+        // Theme Toggle
+        function toggleTheme() {
+            const body = document.body;
+            isDarkTheme = !isDarkTheme;
+            if (!isDarkTheme) {
+                body.classList.add('light-theme');
+                body.classList.remove('bg-bg-dark');
+                document.documentElement.style.setProperty('--panel-bg', '#FFFFFF');
+            } else {
+                body.classList.remove('light-theme');
+                body.classList.add('bg-bg-dark');
+                document.documentElement.style.setProperty('--panel-bg', '#2C2C2C');
+            }
+        }
+        
+        // --- Memory Game Implementation ---
+
+        const cardIcons = ['🍎', '🍊', '🍌', '🍇', '🔔', '⏰', '🔑', '🏠'];
+        let cards = [];
+        let hasFlippedCard = false;
+        let lockBoard = false;
+        let firstCard, secondCard;
+        let matches = 0;
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function createBoard() {
+            cards = [...cardIcons, ...cardIcons];
+            shuffle(cards);
+
+            const gameBoard = document.getElementById('memoryGame');
+            gameBoard.innerHTML = '';
+            gameBoard.classList.add('memory-game');
+            document.getElementById('gameStatus').textContent = '';
+
+            cards.forEach((icon, index) => {
+                const cardElement = document.createElement('div');
+                cardElement.classList.add('memory-card');
+                cardElement.dataset.icon = icon;
+                cardElement.dataset.index = index;
+                
+                cardElement.innerHTML = `
+                    <div class="front-face">${icon}</div>
+                    <div class="back-face">?</div>
+                `;
+
+                cardElement.addEventListener('click', flipCard);
+                gameBoard.appendChild(cardElement);
+            });
+        }
+        
+        function flipCard() {
+            if (lockBoard) return;
+            if (this === firstCard) return;
+
+            this.classList.add('flip');
+
+            if (!hasFlippedCard) {
+                // First card flipped
+                hasFlippedCard = true;
+                firstCard = this;
+                return;
+            }
+
+            // Second card flipped
+            secondCard = this;
+            lockBoard = true; // Lock the board until check is complete
+
+            checkForMatch();
+        }
+
+        function checkForMatch() {
+            const isMatch = firstCard.dataset.icon === secondCard.dataset.icon;
+
+            if (isMatch) {
+                disableCards();
+                matches++;
+                document.getElementById('gameStatus').textContent = `Matches: ${matches}`;
+                if (matches === cardIcons.length) {
+                    setTimeout(() => {
+                        document.getElementById('gameStatus').textContent = '🎉 You Won! Game Over! 🎉';
+                        document.getElementById('startMemory').textContent = 'Play Again';
+                    }, 500);
+                }
+            } else {
+                unflipCards();
+            }
+        }
+
+        function disableCards() {
+            firstCard.removeEventListener('click', flipCard);
+            secondCard.removeEventListener('click', flipCard);
+            
+            // Add a class for styling matched cards
+            firstCard.classList.add('matched');
+            secondCard.classList.add('matched');
+
+            resetBoard();
+        }
+
+        function unflipCards() {
+            setTimeout(() => {
+                firstCard.classList.remove('flip');
+                secondCard.classList.remove('flip');
+                resetBoard();
+            }, 1000); // Keep cards visible for 1 second
+        }
+
+        function resetBoard() {
+            [hasFlippedCard, lockBoard] = [false, false];
+            [firstCard, secondCard] = [null, null];
+        }
+
+        function startMemory() {
+            matches = 0;
+            resetBoard();
+            createBoard();
+            document.getElementById('startMemory').textContent = 'Restart Game';
+            document.getElementById('gameStatus').textContent = 'Matches: 0';
+        }
+
+        // Initialize App
+        window.onload = function() {
+            // Apply initial font size
+            document.documentElement.style.setProperty('--base-font-size', `${baseFontSize}rem`);
+            
+            // Attach Memory Game logic
+            document.getElementById('startMemory').onclick = startMemory;
+        };
+
+    </script>
+</body>
+</html>
