@@ -1,1 +1,1 @@
-make a templates folder and ass the html,css and js files in that
+make a templates folder and add the html,css and js files in that
